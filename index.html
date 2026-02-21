@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trackly | Smart OJT Time Tracker</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class', 
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Public Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        bgLight: '#f4f5f9',       
+                        cardWhite: '#ffffff',     
+                        darkPurple: '#28243d',    
+                        primaryBrand: '#6058F7',  
+                        primaryHover: '#4e46d8',  
+                        accentPurple: '#eeedff',  
+                        textDark: '#1a1926',      
+                        textMuted: '#8b8a96',     
+                        borderLight: '#ebeaef',   
+                        indPink: '#ff4c85',
+                        indOrange: '#ff9800',
+                        indCyan: '#00bcd4',
+                        indGreen: '#10b981',
+                        indRed: '#f43f5e',
+                        indOT: '#f59e0b' 
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(96, 88, 247, 0.05)',
+                        'floating': '0 10px 40px -10px rgba(96, 88, 247, 0.25)',
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'shimmer': 'shimmer 2s infinite linear',
+                    },
+                    keyframes: {
+                        shimmer: {
+                            '0%': { backgroundPosition: '-1000px 0' },
+                            '100%': { backgroundPosition: '1000px 0' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        body { transition: background-color 0.3s, color 0.3s; }
+
+        .modal-overlay { 
+            opacity: 0; 
+            visibility: hidden; 
+            transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.3s; 
+        }
+        .modal-overlay.active { 
+            opacity: 1; 
+            visibility: visible; 
+            transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s; 
+        }
+        .modal-content { 
+            transform: translateY(100%); 
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        @media (min-width: 768px) {
+            .modal-content { transform: scale(0.95) translateY(10px); opacity: 0; }
+        }
+        .modal-overlay.active .modal-content { 
+            transform: translateY(0) scale(1); 
+            opacity: 1; 
+        }
+        
+        .toggle-checkbox:checked { right: 0; border-color: #6058F7; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #6058F7; }
+        .progress-fill { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+
+        .skeleton {
+            background: #f6f7f8;
+            background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
+            background-repeat: no-repeat;
+            background-size: 1000px 100%;
+            animation-duration: 1.5s;
+            animation-fill-mode: forwards; 
+            animation-iteration-count: infinite;
+            animation-name: shimmer;
+            animation-timing-function: linear;
+        }
+        .dark .skeleton {
+            background: #1e293b;
+            background-image: linear-gradient(to right, #1e293b 0%, #334155 20%, #1e293b 40%, #1e293b 100%);
+        }
+    </style>
+</head>
+<body class="bg-bgLight dark:bg-slate-900 text-textDark dark:text-slate-100 antialiased min-h-screen flex flex-col md:pb-0 pb-20">
+
+    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[150] flex flex-col items-center gap-3 w-[90%] max-w-sm pointer-events-none"></div>
+
+    <!-- VIEW 1: LANDING PAGE -->
+    <div id="landing-page" class="flex-1 flex flex-col items-center justify-center p-6 transition-colors min-h-screen">
+        <div class="bg-cardWhite dark:bg-slate-800 rounded-[32px] p-8 max-w-md w-full shadow-floating border border-borderLight dark:border-slate-700 transition-colors">
+            
+            <div class="flex justify-center mb-8 mt-2">
+                <img src="trackly-logo.png" alt="Trackly Logo" class="h-20 w-auto object-contain drop-shadow-md dark:hidden">
+                <img src="trackly-dark-logo.png" alt="Trackly Logo" class="h-20 w-auto object-contain drop-shadow-md hidden dark:block">
+            </div>
+            
+            <p class="text-sm text-textMuted dark:text-slate-400 mb-8 text-center">Your ultimate Smart OJT Time Tracker.</p>
+
+            <div class="space-y-4 mb-8">
+                <div class="flex items-center gap-4 bg-bgLight dark:bg-slate-900 p-4 rounded-2xl border border-borderLight dark:border-slate-700">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg shrink-0">
+                        <i class="fa-solid fa-cloud"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-[11px] font-bold text-darkPurple dark:text-white uppercase tracking-widest">Cloud Sync</h3>
+                        <p class="text-[10px] text-textMuted dark:text-slate-400">Access your DTR securely from any device.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 bg-bgLight dark:bg-slate-900 p-4 rounded-2xl border border-borderLight dark:border-slate-700">
+                    <div class="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg shrink-0">
+                        <i class="fa-solid fa-chart-pie"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-[11px] font-bold text-darkPurple dark:text-white uppercase tracking-widest">Smart Analytics</h3>
+                        <p class="text-[10px] text-textMuted dark:text-slate-400">Track your pacing, overtime, and productivity.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 bg-bgLight dark:bg-slate-900 p-4 rounded-2xl border border-borderLight dark:border-slate-700">
+                    <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center text-lg shrink-0">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-[11px] font-bold text-darkPurple dark:text-white uppercase tracking-widest">Export Ready</h3>
+                        <p class="text-[10px] text-textMuted dark:text-slate-400">One click, ready-to-print PDF or CSV generation.</p>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="showAuthView()" class="w-full py-4 bg-primaryBrand hover:bg-primaryHover text-white font-black uppercase tracking-widest text-[12px] rounded-xl transition-all shadow-floating flex justify-center items-center gap-2 transform hover:-translate-y-1">
+                Get Started <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- VIEW 2: AUTHENTICATION PAGE -->
+    <div id="auth-page" class="flex-1 flex items-center justify-center p-6 transition-colors min-h-screen hidden">
+        <div class="bg-cardWhite dark:bg-slate-800 rounded-[32px] p-8 max-w-sm w-full shadow-floating border border-borderLight dark:border-slate-700 transition-colors">
+            
+            <button onclick="showLandingView()" class="w-8 h-8 rounded-full bg-bgLight dark:bg-slate-900 text-textMuted hover:text-darkPurple dark:hover:text-white flex items-center justify-center mb-6 transition-colors">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+
+            <h2 class="text-2xl font-black text-darkPurple dark:text-white mb-2" id="auth-title">Sign In</h2>
+            <p class="text-[11px] text-textMuted dark:text-slate-400 mb-8" id="auth-subtitle">Access your Trackly account.</p>
+
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                <div id="auth-name-group" class="hidden">
+                    <label class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Name</label>
+                    <input type="text" id="auth-name" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 text-[13px] font-medium text-darkPurple dark:text-white focus:ring-2 focus:ring-primaryBrand outline-none transition-all placeholder:text-slate-400" placeholder="e.g., John Doe">
+                </div>
+                
+                <div>
+                    <label class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Email Address</label>
+                    <input type="email" id="auth-email" required class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 text-[13px] font-medium text-darkPurple dark:text-white focus:ring-2 focus:ring-primaryBrand outline-none transition-all placeholder:text-slate-400" placeholder="john@example.com">
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Password</label>
+                    <div class="relative">
+                        <input type="password" id="auth-password" required class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 pr-12 text-[13px] font-medium text-darkPurple dark:text-white focus:ring-2 focus:ring-primaryBrand outline-none transition-all placeholder:text-slate-400" placeholder="••••••••">
+                        <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-4 flex items-center text-textMuted hover:text-primaryBrand transition-colors focus:outline-none" title="Toggle Password Visibility">
+                            <i class="fa-solid fa-eye text-[13px]" id="toggle-password-icon"></i>
+                        </button>
+                    </div>
+                    <div class="flex justify-end mt-2" id="forgot-password-container">
+                        <button type="button" onclick="openForgotPasswordModal()" class="text-[10px] text-textMuted hover:text-primaryBrand dark:hover:text-primaryBrand font-bold transition-colors">Forgot Password?</button>
+                    </div>
+                </div>
+
+                <button type="submit" id="btn-auth-submit" class="w-full py-4 mt-4 bg-primaryBrand hover:bg-primaryHover text-white font-black uppercase tracking-widest text-[12px] rounded-xl transition-all shadow-soft flex justify-center items-center gap-2">
+                    Sign In
+                </button>
+            </form>
+
+            <div class="mt-6 flex items-center justify-center space-x-2">
+                <span class="h-px w-full bg-borderLight dark:bg-slate-700"></span>
+                <span class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest">OR</span>
+                <span class="h-px w-full bg-borderLight dark:bg-slate-700"></span>
+            </div>
+
+            <div class="mt-6 space-y-3">
+                <button type="button" onclick="handleOAuth('google')" class="w-full py-3.5 bg-white dark:bg-slate-700 text-textDark dark:text-white font-bold text-xs rounded-xl shadow-sm border border-borderLight dark:border-slate-600 flex justify-center items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors">
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" class="w-4 h-4">
+                    Continue with Google
+                </button>
+            </div>
+
+            <div class="mt-6 text-center">
+                <button type="button" onclick="toggleAuthMode()" class="text-[11px] font-bold text-primaryBrand hover:text-primaryHover underline-offset-2 hover:underline transition-colors" id="auth-toggle-btn">
+                    Don't have an account? Sign Up
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW 3: MAIN APP DASHBOARD -->
+    <div id="app-dashboard" class="flex-1 flex flex-col w-full hidden">
+        
+        <header class="hidden md:flex justify-between items-center px-8 py-4 bg-cardWhite dark:bg-slate-800 border-b border-borderLight dark:border-slate-700 sticky top-0 z-40 shadow-sm transition-colors">
+            <div class="flex items-center gap-3">
+                <img src="trackly-logo.png" alt="Trackly Logo" class="h-7 w-auto object-contain dark:hidden">
+                <img src="trackly-dark-logo.png" alt="Trackly Logo" class="h-7 w-auto object-contain hidden dark:block">
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-[11px] font-bold text-textMuted dark:text-slate-400 bg-bgLight dark:bg-slate-900 px-3 py-1.5 rounded-full border border-borderLight dark:border-slate-700" id="desktop-date"></span>
+                
+                <button onclick="checkNotifications(true)" class="relative flex items-center justify-center w-8 h-8 rounded-full bg-bgLight dark:bg-slate-900 text-textMuted hover:text-primaryBrand transition-colors border border-borderLight dark:border-slate-700 ml-1" title="Notifications">
+                    <i class="fa-solid fa-bell text-[12px]"></i>
+                    <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-indRed rounded-full border border-cardWhite dark:border-slate-900 hidden" id="notif-dot-desktop"></span>
+                </button>
+
+                <button onclick="openSettings()" class="flex items-center gap-2 bg-bgLight dark:bg-slate-900 hover:bg-accentPurple dark:hover:bg-primaryBrand/20 text-primaryBrand px-3 py-1.5 rounded-full transition-colors border border-borderLight dark:border-slate-700" title="Settings">
+                    <i class="fa-solid fa-user-astronaut text-[11px]"></i>
+                    <span class="text-[10px] font-bold uppercase tracking-widest truncate max-w-[100px]" id="desktop-username">Intern</span>
+                </button>
+                
+                <div class="flex gap-2">
+                    <button onclick="exportCSV()" class="bg-cardWhite dark:bg-slate-800 hover:bg-bgLight dark:hover:bg-slate-700 text-textDark dark:text-white border border-borderLight dark:border-slate-600 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-2 transition-colors shadow-soft">
+                        <i class="fa-solid fa-file-csv text-indGreen"></i> CSV
+                    </button>
+                    <button onclick="generatePDF()" class="bg-primaryBrand hover:bg-primaryHover text-white px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-2 transition-colors shadow-soft">
+                        <i class="fa-solid fa-file-pdf"></i> PDF
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="w-full max-w-7xl mx-auto px-5 md:px-8 pt-6 pb-10 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-4 space-y-6">
+                
+                <div class="md:hidden flex justify-between items-center bg-cardWhite dark:bg-slate-800 p-4 rounded-2xl shadow-soft border border-borderLight dark:border-slate-700 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <img src="trackly-logo.png" alt="Trackly Logo" class="h-10 w-auto object-contain dark:hidden">
+                        <img src="trackly-dark-logo.png" alt="Trackly Logo" class="h-10 w-auto object-contain hidden dark:block">
+                        <div>
+                            <h1 class="text-base font-black tracking-tight text-darkPurple dark:text-white">Hello, <span id="mobile-username">Intern</span>!</h1>
+                            <p class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest mt-0.5">Trackly Dashboard</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="checkNotifications(true)" class="relative w-8 h-8 rounded-full bg-bgLight dark:bg-slate-900 hover:bg-accentPurple text-textMuted hover:text-primaryBrand flex items-center justify-center transition-colors border border-borderLight dark:border-slate-700">
+                            <i class="fa-solid fa-bell text-[11px]"></i>
+                            <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-indRed rounded-full border border-cardWhite dark:border-slate-900 hidden" id="notif-dot-mobile-header"></span>
+                        </button>
+                        <button onclick="openSettings()" class="w-8 h-8 rounded-full bg-bgLight dark:bg-slate-900 hover:bg-accentPurple text-primaryBrand flex items-center justify-center transition-colors border border-borderLight dark:border-slate-700">
+                            <i class="fa-solid fa-gear text-[11px]"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-cardWhite dark:bg-slate-800 rounded-3xl p-6 shadow-soft border border-borderLight dark:border-slate-700 relative overflow-hidden group transition-colors">
+                    <div class="absolute -right-10 -top-10 w-32 h-32 bg-primaryBrand rounded-full opacity-[0.15] blur-2xl pointer-events-none"></div>
+                    <div class="z-10 relative">
+                        <div class="flex justify-between items-start mb-1">
+                            <p class="text-[10px] uppercase tracking-widest font-bold text-textMuted dark:text-slate-400">Live Device Time</p>
+                            <div id="running-timer-container" class="hidden flex items-center gap-1.5 bg-primaryBrand/10 text-primaryBrand px-2 py-0.5 rounded border border-primaryBrand/20">
+                                <i class="fa-solid fa-stopwatch animate-spin-slow text-[9px]"></i>
+                                <span class="text-[10px] font-black tabular-nums tracking-widest" id="running-timer-display">00:00:00</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-baseline gap-1.5 mb-6">
+                            <span id="live-clock" class="text-5xl font-black text-darkPurple dark:text-white tabular-nums tracking-tighter">00:00</span>
+                            <span id="live-ampm" class="text-sm font-bold text-primaryBrand uppercase">AM</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button id="btn-clock-in" onclick="toggleClockIn()" class="flex-1 bg-primaryBrand hover:bg-primaryHover text-white py-3.5 rounded-xl font-black text-[11px] uppercase tracking-wider transition-colors shadow-floating flex justify-center items-center gap-2">
+                                <i class="fa-solid fa-fingerprint"></i> Time In
+                            </button>
+                            <button id="btn-clock-out" onclick="openEndShiftScreen()" class="hidden flex-1 bg-indRed hover:bg-rose-600 text-white py-3.5 rounded-xl font-black text-[11px] uppercase tracking-wider transition-colors shadow-floating flex justify-center items-center gap-2 animate-pulse-fast">
+                                <i class="fa-solid fa-power-off"></i> Time Out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-cardWhite dark:bg-slate-800 rounded-3xl p-5 border border-borderLight dark:border-slate-700 shadow-soft relative overflow-hidden transition-colors">
+                    <h3 class="text-[10px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                        <i class="fa-solid fa-medal text-primaryBrand"></i> Productivity Score
+                    </h3>
+                    
+                    <div class="flex items-center justify-between mb-4">
+                        <div id="badge-container" class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border flex items-center gap-2">
+                            <i id="badge-icon" class="fa-solid fa-circle-notch fa-spin"></i>
+                            <span id="badge-text">Calculating...</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div onclick="openStreakModal()" class="bg-bgLight dark:bg-slate-900 rounded-xl p-3 border border-borderLight dark:border-slate-700 text-center cursor-pointer hover:border-orange-400 dark:hover:border-orange-500 transition-colors group">
+                            <p class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-wider mb-1 group-hover:text-orange-500 transition-colors">Daily Streak</p>
+                            <p class="text-xl font-black text-darkPurple dark:text-white leading-none"><span id="streak-days">0</span> <i class="fa-solid fa-fire text-orange-500 text-[13px] group-hover:scale-125 transition-transform inline-block"></i></p>
+                        </div>
+                        <div class="bg-bgLight dark:bg-slate-900 rounded-xl p-3 border border-borderLight dark:border-slate-700 text-center">
+                            <p class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-wider mb-1">Avg Hrs/Day</p>
+                            <p class="text-xl font-black text-darkPurple dark:text-white leading-none"><span id="avg-hours">0.0</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-cardWhite dark:bg-slate-800 rounded-3xl p-5 border border-borderLight dark:border-slate-700 shadow-soft relative overflow-hidden transition-colors">
+                    <div class="flex items-center justify-between mb-4 border-b border-borderLight dark:border-slate-700 pb-3">
+                        <h3 class="text-[10px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <i class="fa-solid fa-chart-line text-primaryBrand"></i> Pacing Status
+                        </h3>
+                        <div id="pacing-badge" class="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-bgLight dark:bg-slate-900 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700">--</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                            <p class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-wider mb-1">Target Date</p>
+                            <p class="text-[12px] font-black text-darkPurple dark:text-white leading-none" id="target-date-display">Not Set</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-wider mb-1">Days Left</p>
+                            <p class="text-[12px] font-black text-primaryBrand leading-none" id="days-remaining-display">--</p>
+                        </div>
+                    </div>
+                    <div class="bg-bgLight dark:bg-slate-900 rounded-xl p-3 border border-borderLight dark:border-slate-700 flex justify-between items-center mb-3" id="pacing-metrics">
+                        <div class="flex-1 text-center border-r border-borderLight dark:border-slate-700">
+                            <p class="text-[9px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest mb-0.5">Req. Hrs/Day</p>
+                            <p class="text-sm font-black text-darkPurple dark:text-white"><span id="req-day">--</span> <span class="text-[9px] font-bold text-textMuted dark:text-slate-400">h</span></p>
+                        </div>
+                        <div class="flex-1 text-center">
+                            <p class="text-[9px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest mb-0.5">Req. Hrs/Week</p>
+                            <p class="text-sm font-black text-darkPurple dark:text-white"><span id="req-week">--</span> <span class="text-[9px] font-bold text-textMuted dark:text-slate-400">h</span></p>
+                        </div>
+                    </div>
+                    <div class="text-center bg-primaryBrand/5 dark:bg-primaryBrand/10 rounded-lg py-2 border border-primaryBrand/10">
+                        <p class="text-[9px] font-bold text-primaryBrand uppercase tracking-widest" id="est-finish-display">Est. Finish: --</p>
+                    </div>
+                </div>
+
+                <div class="bg-cardWhite dark:bg-slate-800 rounded-3xl p-5 border border-borderLight dark:border-slate-700 shadow-soft relative overflow-hidden transition-colors">
+                    <h3 class="text-[10px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                        <i class="fa-solid fa-chart-bar text-primaryBrand"></i> Weekly Analytics
+                    </h3>
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div class="bg-bgLight dark:bg-slate-900 rounded-lg p-3 border border-borderLight dark:border-slate-700">
+                            <p class="text-[8px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest mb-1">Regular Hrs</p>
+                            <p class="text-[13px] font-black text-darkPurple dark:text-white" id="stat-reg-hours">0</p>
+                        </div>
+                        <div class="bg-[#fffbeb] dark:bg-amber-900/20 rounded-lg p-3 border border-[#fef3c7] dark:border-amber-900/50">
+                            <p class="text-[8px] font-bold text-indOT dark:text-amber-500 uppercase tracking-widest mb-1">Total Overtime</p>
+                            <p class="text-[13px] font-black text-indOT dark:text-amber-500" id="stat-ot-hours">0</p>
+                        </div>
+                    </div>
+                    <div class="w-full h-32 relative">
+                        <canvas id="weeklyChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-cardWhite dark:bg-slate-800 rounded-3xl p-5 border border-borderLight dark:border-slate-700 shadow-soft relative overflow-hidden transition-colors">
+                    <h3 class="text-[10px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                        <i class="fa-solid fa-calendar-day text-indPink"></i> Upcoming Holidays
+                    </h3>
+                    <div id="holidays-container" class="space-y-2 max-h-36 overflow-y-auto pr-1 no-scrollbar">
+                        <p class="text-[10px] text-textMuted dark:text-slate-500">Calculating...</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="lg:col-span-8 flex flex-col gap-6">
+                
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+                    <div class="col-span-2 md:col-span-2 bg-cardWhite dark:bg-slate-800 rounded-[24px] p-5 border border-borderLight dark:border-slate-700 shadow-soft flex flex-col justify-between transition-colors">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <h3 class="text-[10px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest">Total Rendered</h3>
+                                    <span class="text-[8px] font-bold bg-primaryBrand/10 text-primaryBrand px-1.5 py-0.5 rounded" id="today-total-display">0.0h Today</span>
+                                </div>
+                                <p class="text-xl font-black text-darkPurple dark:text-white"><span id="total-hours-display">0</span> <span class="text-[11px] font-bold text-textMuted dark:text-slate-500 uppercase">hrs</span></p>
+                            </div>
+                            <div class="text-right">
+                                <h3 class="text-[10px] font-bold text-textMuted dark:text-slate-400 uppercase tracking-widest mb-1">Target Limit</h3>
+                                <p class="text-sm font-black text-primaryBrand"><span id="target-hours-display">486</span> <span class="text-[10px] font-bold text-textMuted dark:text-slate-500 uppercase">hrs</span></p>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <div class="flex justify-between items-end mb-1">
+                                <span class="text-[10px] font-bold text-darkPurple dark:text-white" id="progress-percentage">0%</span>
+                            </div>
+                            <div class="w-full bg-bgLight dark:bg-slate-700 rounded-full h-2 overflow-hidden border border-borderLight dark:border-slate-600">
+                                <div id="progress-bar-fill" class="bg-primaryBrand h-full rounded-full progress-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-span-2 md:col-span-1 bg-darkPurple dark:bg-slate-900 rounded-[24px] p-5 shadow-floating flex flex-col justify-center items-center text-center relative overflow-hidden transition-colors border border-transparent dark:border-slate-700">
+                        <div class="absolute -right-4 -bottom-4 text-5xl text-white opacity-[0.03]"><i class="fa-solid fa-briefcase"></i></div>
+                        <div class="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center mb-3 z-10" id="status-icon">
+                            <i class="fa-solid fa-mug-hot text-[11px]"></i>
+                        </div>
+                        <div class="z-10">
+                            <h3 class="text-[9px] font-bold text-white/50 uppercase tracking-widest mb-0.5">Current Status</h3>
+                            <p class="text-[12px] font-black text-white uppercase tracking-wider" id="status-display">Clocked Out</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 bg-cardWhite dark:bg-slate-800 rounded-[28px] p-5 md:p-6 border border-borderLight dark:border-slate-700 shadow-soft flex flex-col transition-colors relative min-h-[400px]">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-[11px] font-black uppercase tracking-widest text-darkPurple dark:text-white">Recent History</h2>
+                        <div class="flex gap-2">
+                            <button onclick="openLogEntryModal()" class="bg-bgLight dark:bg-slate-900 hover:bg-accentPurple dark:hover:bg-primaryBrand/20 border border-borderLight dark:border-slate-700 text-primaryBrand px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors flex items-center gap-1.5">
+                                <i class="fa-solid fa-plus"></i> Manual
+                            </button>
+                            <span class="text-[10px] font-bold bg-accentPurple dark:bg-primaryBrand/10 text-primaryBrand px-2.5 py-1.5 rounded-lg border border-primaryBrand/20" id="total-logs-count">0 Entries</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2 mb-4 pb-4 border-b border-borderLight dark:border-slate-700">
+                        <div class="relative flex-1">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-textMuted dark:text-slate-400 text-[10px]"></i>
+                            <input type="text" id="search-logs" oninput="applyFilters()" placeholder="Search tasks..." class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-lg py-2 pl-8 pr-3 text-[11px] font-medium text-darkPurple dark:text-white focus:ring-1 focus:ring-primaryBrand outline-none placeholder:text-textMuted/70 transition-colors">
+                        </div>
+                        <select id="filter-tag" onchange="applyFilters()" class="bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-lg py-2 px-3 text-[11px] font-bold text-darkPurple dark:text-white focus:ring-1 focus:ring-primaryBrand outline-none w-32 transition-colors">
+                            <option value="All">All Tags</option>
+                            <option value="Development">Dev</option>
+                            <option value="Meeting">Meeting</option>
+                            <option value="UI Design">Design</option>
+                            <option value="Documentation">Docs</option>
+                        </select>
+                    </div>
+                    
+                    <div class="space-y-3 overflow-y-auto pr-2 flex-1" id="logs-container">
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <nav class="md:hidden fixed bottom-0 w-full bg-cardWhite/90 dark:bg-slate-800/90 backdrop-blur-md rounded-t-3xl border-t border-borderLight dark:border-slate-700 px-6 py-3 flex justify-between items-center z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] transition-colors">
+            <button class="text-primaryBrand text-lg"><i class="fa-solid fa-house"></i></button>
+            <button onclick="exportCSV()" class="text-textMuted dark:text-slate-400 hover:text-indGreen text-lg transition-colors" title="Export CSV"><i class="fa-solid fa-file-csv"></i></button>
+            
+            <button onclick="generatePDF()" class="w-12 h-12 bg-primaryBrand text-white rounded-full flex items-center justify-center shadow-floating transform -translate-y-5 hover:scale-105 transition-transform border-[3px] border-bgLight dark:border-slate-900">
+                <i class="fa-solid fa-file-pdf text-sm"></i>
+            </button>
+            
+            <button onclick="openLogEntryModal()" class="text-textMuted dark:text-slate-400 hover:text-primaryBrand text-lg transition-colors" title="Add Entry"><i class="fa-solid fa-square-plus"></i></button>
+            <button onclick="openSettings()" class="text-textMuted dark:text-slate-400 hover:text-primaryBrand text-lg transition-colors"><i class="fa-solid fa-gear"></i></button>
+        </nav>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay fixed inset-0 z-[100] bg-darkPurple/60 dark:bg-black/80 backdrop-blur-sm flex justify-center items-end md:items-center">
+        <div class="modal-content w-full md:max-w-sm bg-cardWhite dark:bg-slate-800 md:rounded-3xl rounded-t-[32px] border border-borderLight dark:border-slate-700 flex flex-col shadow-2xl transition-colors">
+            <div class="px-6 py-5 flex justify-between items-center border-b border-borderLight dark:border-slate-700">
+                <h2 class="text-sm font-black tracking-widest uppercase text-darkPurple dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-gear text-primaryBrand"></i> SETTINGS
+                </h2>
+                <button onclick="closeSettings()" class="text-textMuted hover:text-indRed transition-colors w-7 h-7 flex items-center justify-center bg-bgLight dark:bg-slate-700 rounded-full">
+                    <i class="fa-solid fa-xmark text-xs"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-5">
+                <div>
+                    <label for="setting-username" class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-2">Display Name</label>
+                    <input type="text" id="setting-username" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 text-xs font-bold text-darkPurple dark:text-white focus:ring-1 focus:ring-primaryBrand outline-none transition-all" placeholder="e.g., John Doe">
+                </div>
+
+                <div>
+                    <label for="setting-email" class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-2">Email Address</label>
+                    <input type="email" id="setting-email" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 text-xs font-bold text-darkPurple dark:text-white focus:ring-1 focus:ring-primaryBrand outline-none transition-all" placeholder="your@email.com">
+                    <p class="text-[10px] text-textMuted dark:text-slate-500 mt-2 flex items-center gap-1.5"><i class="fa-solid fa-circle-info text-primaryBrand"></i>If changed, a verification link will be sent.</p>
+                </div>
+
+                <div class="flex items-center justify-between bg-bgLight dark:bg-slate-900 p-4 rounded-xl border border-borderLight dark:border-slate-700">
+                    <label for="theme-toggle" class="cursor-pointer block flex-1">
+                        <span class="text-xs font-bold text-darkPurple dark:text-white block flex items-center gap-2"><i class="fa-solid fa-moon"></i> Dark Mode</span>
+                        <span class="text-[9px] uppercase tracking-widest text-textMuted dark:text-slate-500 block mt-0.5">Toggle dark theme</span>
+                    </label>
+                    <div class="relative inline-block w-10 mr-1 align-middle select-none">
+                        <input type="checkbox" id="theme-toggle" onchange="toggleDarkMode(event)" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-borderLight dark:border-slate-600 transition-all duration-200"/>
+                        <label for="theme-toggle" class="toggle-label block overflow-hidden h-5 rounded-full bg-borderLight dark:bg-slate-700 cursor-pointer transition-colors duration-200"></label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="setting-hours" class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-2 leading-tight">Target Required<br>Hours</label>
+                        <input type="number" id="setting-hours" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 text-xs font-bold text-darkPurple dark:text-white focus:ring-1 focus:ring-primaryBrand outline-none transition-all">
+                    </div>
+                    <div>
+                        <label for="setting-date" class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-2 leading-tight">Target Completion<br>Date</label>
+                        <input type="date" id="setting-date" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 text-xs font-bold text-darkPurple dark:text-white focus:ring-1 focus:ring-primaryBrand outline-none transition-all" style="color-scheme: dark;">
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-5 border-t border-borderLight dark:border-slate-700 bg-cardWhite dark:bg-slate-800 md:rounded-b-3xl space-y-3">
+                <button id="btn-save-settings" onclick="saveSettings()" class="w-full py-4 bg-primaryBrand hover:bg-primaryHover text-white font-black uppercase tracking-widest text-[11px] rounded-xl transition-colors shadow-soft">
+                    Save Configuration
+                </button>
+                <button onclick="handleLogout()" class="w-full py-4 bg-rose-100 dark:bg-rose-900/30 hover:bg-rose-200 dark:hover:bg-rose-900/50 text-indRed font-black uppercase tracking-widest text-[11px] rounded-xl transition-colors">
+                    <i class="fa-solid fa-arrow-right-from-bracket mr-2"></i> Log Out
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Streak Calendar Modal -->
+    <div id="streakModal" class="modal-overlay fixed inset-0 z-[120] bg-darkPurple/60 dark:bg-black/80 backdrop-blur-sm flex justify-center items-center">
+        <div class="modal-content w-[90%] max-w-sm bg-cardWhite dark:bg-slate-800 rounded-[24px] p-6 border border-borderLight dark:border-slate-700 shadow-2xl transition-colors">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-black text-darkPurple dark:text-white tracking-tight flex items-center gap-2"><i class="fa-solid fa-fire text-orange-500"></i> Streak Calendar</h3>
+                <button onclick="closeStreakModal()" class="text-textMuted hover:text-indRed w-6 h-6 flex items-center justify-center rounded-full bg-bgLight dark:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-xmark text-[11px]"></i>
+                </button>
+            </div>
+            
+            <div class="flex justify-between items-center mb-4 bg-bgLight dark:bg-slate-900 p-2 rounded-xl border border-borderLight dark:border-slate-700">
+                <button onclick="changeStreakMonth(-1)" class="w-8 h-8 rounded-lg bg-cardWhite dark:bg-slate-800 flex items-center justify-center text-textMuted hover:text-primaryBrand transition-colors shadow-sm"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                <h4 id="streak-month-year" class="text-xs font-black text-darkPurple dark:text-white uppercase tracking-widest">Month Year</h4>
+                <button onclick="changeStreakMonth(1)" class="w-8 h-8 rounded-lg bg-cardWhite dark:bg-slate-800 flex items-center justify-center text-textMuted hover:text-primaryBrand transition-colors shadow-sm"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+            </div>
+            
+            <div class="grid grid-cols-7 gap-2 text-center mb-2">
+                <div class="text-[9px] font-bold text-textMuted dark:text-slate-500">SUN</div>
+                <div class="text-[9px] font-bold text-textMuted dark:text-slate-500">MON</div>
+                <div class="text-[9px] font-bold text-textMuted dark:text-slate-500">TUE</div>
+                <div class="text-[9px] font-bold text-textMuted dark:text-slate-500">WED</div>
+                <div class="text-[9px] font-bold text-textMuted dark:text-slate-500">THU</div>
+                <div class="text-[9px] font-bold text-textMuted dark:text-slate-500">FRI</div>
+                <div class="text-[9px] font-bold text-textMuted dark:text-slate-500">SAT</div>
+            </div>
+            
+            <div id="streak-calendar-grid" class="grid grid-cols-7 gap-y-3 gap-x-2 text-center mt-3">
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Entry Modal -->
+    <div id="logEntryModal" class="modal-overlay fixed inset-0 z-[100] bg-darkPurple/60 dark:bg-black/80 backdrop-blur-sm flex justify-center items-end md:items-center">
+        <div class="modal-content w-full md:max-w-md bg-cardWhite dark:bg-slate-800 md:rounded-3xl rounded-t-[32px] border border-borderLight dark:border-slate-700 flex flex-col max-h-[95vh] overflow-hidden shadow-2xl transition-colors">
+            <div class="px-6 md:px-8 py-4 flex justify-between items-center border-b border-borderLight dark:border-slate-700 bg-cardWhite dark:bg-slate-800 sticky top-0 z-10 transition-colors">
+                <h2 class="text-[13px] font-black tracking-widest uppercase text-darkPurple dark:text-white" id="log-modal-title">Log Entry</h2>
+                <button onclick="closeLogEntryModal()" class="text-textMuted hover:text-indRed w-7 h-7 flex items-center justify-center rounded-full bg-bgLight dark:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-xmark text-[11px]"></i>
+                </button>
+            </div>
+
+            <div class="p-6 md:px-8 overflow-y-auto space-y-4 flex-1 bg-bgLight/30 dark:bg-slate-900/30">
+                <input type="hidden" id="entry-id" value="">
+                
+                <div class="bg-cardWhite dark:bg-slate-800 p-4 rounded-2xl border border-borderLight dark:border-slate-700 shadow-sm space-y-3 transition-colors">
+                    <div>
+                        <label class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Date</label>
+                        <input type="date" id="entry-date" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-lg p-2 text-[11px] font-bold text-darkPurple dark:text-white outline-none focus:border-primaryBrand" style="color-scheme: dark;">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Time In</label>
+                            <input type="time" id="entry-time-in" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-lg p-2 text-[11px] font-bold text-darkPurple dark:text-white outline-none focus:border-primaryBrand" style="color-scheme: dark;">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Time Out</label>
+                            <input type="time" id="entry-time-out" class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-lg p-2 text-[11px] font-bold text-darkPurple dark:text-white outline-none focus:border-primaryBrand" style="color-scheme: dark;">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Task Description</label>
+                    <textarea id="entry-task" class="w-full h-20 bg-cardWhite dark:bg-slate-800 border border-borderLight dark:border-slate-700 rounded-xl p-3 text-[11px] font-medium text-textDark dark:text-white focus:ring-1 focus:ring-primaryBrand resize-none shadow-sm placeholder:text-textMuted/50 transition-colors" placeholder="What did you accomplish?"></textarea>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Tag / Category</label>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="entry-tag" value="Development" class="peer sr-only" checked>
+                            <span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#e0f7fa] dark:peer-checked:bg-[#00bcd4]/10 peer-checked:text-[#00bcd4] peer-checked:border-[#00bcd4] transition-all shadow-sm">Dev</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="entry-tag" value="Meeting" class="peer sr-only">
+                            <span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#f3e8ff] dark:peer-checked:bg-[#9333ea]/10 peer-checked:text-[#9333ea] peer-checked:border-[#9333ea] transition-all shadow-sm">Meeting</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="entry-tag" value="UI Design" class="peer sr-only">
+                            <span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#fce7f3] dark:peer-checked:bg-[#ec4899]/10 peer-checked:text-[#ec4899] peer-checked:border-[#ec4899] transition-all shadow-sm">Design</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="entry-tag" value="Documentation" class="peer sr-only">
+                            <span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#ffedd5] dark:peer-checked:bg-[#f97316]/10 peer-checked:text-[#f97316] peer-checked:border-[#f97316] transition-all shadow-sm">Docs</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between bg-cardWhite dark:bg-slate-800 p-3.5 rounded-xl border border-borderLight dark:border-slate-700 shadow-sm transition-colors">
+                    <label for="entry-break" class="cursor-pointer block flex-1">
+                        <span class="text-[11px] font-bold text-darkPurple dark:text-white block">Deduct Lunch Break</span>
+                        <span class="text-[9px] uppercase tracking-widest text-textMuted dark:text-slate-400 block">-1 hr standard deduction</span>
+                    </label>
+                    <div class="relative inline-block w-10 mr-1 align-middle select-none">
+                        <input type="checkbox" id="entry-break" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-borderLight dark:border-slate-600 transition-all duration-200" checked/>
+                        <label for="entry-break" class="toggle-label block overflow-hidden h-5 rounded-full bg-borderLight dark:bg-slate-700 cursor-pointer transition-colors duration-200"></label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 md:px-8 py-4 border-t border-borderLight dark:border-slate-700 bg-cardWhite dark:bg-slate-800 transition-colors">
+                <button onclick="saveLogEntry()" class="w-full py-3.5 bg-primaryBrand hover:bg-primaryHover text-white font-black uppercase tracking-widest text-[11px] rounded-xl transition-colors shadow-soft">
+                    Save Record
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clock Out Modal -->
+    <div id="endShiftModal" class="modal-overlay fixed inset-0 z-[100] bg-darkPurple/60 dark:bg-black/80 backdrop-blur-sm flex justify-center items-end md:items-center">
+        <div class="modal-content w-full md:max-w-md bg-cardWhite dark:bg-slate-800 md:rounded-3xl rounded-t-[32px] border border-borderLight dark:border-slate-700 flex flex-col max-h-[90vh] overflow-hidden shadow-2xl transition-colors">
+            <div class="px-6 md:px-8 py-4 flex justify-between items-center border-b border-borderLight dark:border-slate-700 bg-cardWhite dark:bg-slate-800 sticky top-0 z-10">
+                <h2 class="text-[13px] font-black tracking-widest uppercase text-darkPurple dark:text-white">End Shift</h2>
+                <button onclick="closeEndShiftScreen()" class="text-textMuted hover:text-indRed w-7 h-7 flex items-center justify-center rounded-full bg-bgLight dark:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-xmark text-[11px]"></i>
+                </button>
+            </div>
+            <div class="p-6 md:px-8 overflow-y-auto space-y-5 flex-1 bg-bgLight/30 dark:bg-slate-900/30">
+                <div class="grid grid-cols-2 gap-4 bg-cardWhite dark:bg-slate-800 p-4 rounded-2xl border border-borderLight dark:border-slate-700 shadow-sm transition-colors">
+                    <div class="col-span-2 flex justify-between items-center mb-1">
+                        <label class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest">Date</label>
+                        <div class="text-[11px] font-black text-darkPurple dark:text-white" id="modal-date"></div>
+                    </div>
+                    <div class="h-px bg-borderLight dark:bg-slate-700 col-span-2 my-1"></div>
+                    <div>
+                        <label class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Time In</label>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-base font-black text-darkPurple dark:text-white" id="modal-time-in"></span>
+                            <span class="text-[9px] font-bold text-primaryBrand" id="modal-time-in-ampm"></span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[9px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-1">Time Out</label>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-base font-black text-darkPurple dark:text-white" id="modal-time-out"></span>
+                            <span class="text-[9px] font-bold text-primaryBrand" id="modal-time-out-ampm"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-2">Task Description</label>
+                    <textarea id="task-input" class="w-full h-24 bg-cardWhite dark:bg-slate-800 border border-borderLight dark:border-slate-700 rounded-xl p-3 text-[11px] font-medium text-textDark dark:text-white focus:ring-1 focus:ring-primaryBrand transition-all resize-none shadow-sm placeholder:text-textMuted/50" placeholder="What did you work on today?"></textarea>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-textMuted dark:text-slate-400 font-bold uppercase tracking-widest block mb-2">Tag / Category</label>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="cursor-pointer"><input type="radio" name="tag" value="Development" class="peer sr-only" checked><span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#e0f7fa] dark:peer-checked:bg-[#00bcd4]/10 peer-checked:text-[#00bcd4] peer-checked:border-[#00bcd4] transition-all shadow-sm">Dev</span></label>
+                        <label class="cursor-pointer"><input type="radio" name="tag" value="Meeting" class="peer sr-only"><span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#f3e8ff] dark:peer-checked:bg-[#9333ea]/10 peer-checked:text-[#9333ea] peer-checked:border-[#9333ea] transition-all shadow-sm">Meeting</span></label>
+                        <label class="cursor-pointer"><input type="radio" name="tag" value="UI Design" class="peer sr-only"><span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#fce7f3] dark:peer-checked:bg-[#ec4899]/10 peer-checked:text-[#ec4899] peer-checked:border-[#ec4899] transition-all shadow-sm">Design</span></label>
+                        <label class="cursor-pointer"><input type="radio" name="tag" value="Documentation" class="peer sr-only"><span class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cardWhite dark:bg-slate-800 text-textMuted dark:text-slate-400 border border-borderLight dark:border-slate-700 peer-checked:bg-[#ffedd5] dark:peer-checked:bg-[#f97316]/10 peer-checked:text-[#f97316] peer-checked:border-[#f97316] transition-all shadow-sm">Docs</span></label>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between bg-cardWhite dark:bg-slate-800 p-3.5 rounded-xl border border-borderLight dark:border-slate-700 shadow-sm transition-colors">
+                    <label for="lunchBreakToggle" class="cursor-pointer block flex-1">
+                        <span class="text-[11px] font-bold text-darkPurple dark:text-white block">Deduct Lunch Break</span>
+                        <span class="text-[9px] uppercase tracking-widest text-textMuted dark:text-slate-400 block">-1 hr standard deduction</span>
+                    </label>
+                    <div class="relative inline-block w-10 mr-1 align-middle select-none">
+                        <input type="checkbox" id="lunchBreakToggle" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-borderLight dark:border-slate-600 transition-all duration-200" checked/>
+                        <label for="lunchBreakToggle" class="toggle-label block overflow-hidden h-5 rounded-full bg-borderLight dark:bg-slate-700 cursor-pointer transition-colors duration-200"></label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 md:px-8 py-4 border-t border-borderLight dark:border-slate-700 bg-cardWhite dark:bg-slate-800 transition-colors">
+                <button onclick="confirmClockOut()" class="w-full py-3.5 bg-primaryBrand hover:bg-primaryHover text-white font-black uppercase tracking-widest text-[11px] rounded-xl transition-colors shadow-soft">Save Entry</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal-overlay fixed inset-0 z-[110] bg-darkPurple/60 dark:bg-black/80 backdrop-blur-sm flex justify-center items-center">
+        <div class="modal-content w-[90%] max-w-sm bg-cardWhite dark:bg-slate-800 rounded-[24px] p-6 border border-borderLight dark:border-slate-700 shadow-2xl">
+            <div class="flex flex-col items-center text-center">
+                <div class="w-14 h-14 rounded-full bg-rose-100 dark:bg-rose-900/30 text-indRed flex items-center justify-center text-2xl mb-4">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="text-sm font-black text-darkPurple dark:text-white mb-2 uppercase tracking-widest">Delete Log?</h3>
+                <p class="text-[11px] text-textMuted dark:text-slate-400 mb-6">This action cannot be undone.</p>
+                <div class="flex w-full gap-3">
+                    <button onclick="closeDeleteModal()" class="flex-1 py-3 bg-bgLight dark:bg-slate-700 text-textDark dark:text-white font-bold text-[11px] uppercase tracking-widest rounded-xl transition-colors hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
+                    <button onclick="confirmDeleteLog()" class="flex-1 py-3 bg-indRed hover:bg-rose-600 text-white font-bold text-[11px] uppercase tracking-widest rounded-xl transition-colors">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Verification Sent Modal -->
+    <div id="verificationModal" class="modal-overlay fixed inset-0 z-[120] bg-darkPurple/60 dark:bg-black/80 backdrop-blur-sm flex justify-center items-center">
+        <div class="modal-content w-[90%] max-w-sm bg-cardWhite dark:bg-slate-800 rounded-[24px] p-6 border border-borderLight dark:border-slate-700 shadow-2xl transition-colors">
+            <div class="flex flex-col items-center text-center">
+                <div class="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-3xl mb-4 shadow-inner">
+                    <i class="fa-solid fa-envelope-open-text"></i>
+                </div>
+                <h3 class="text-lg font-black text-darkPurple dark:text-white mb-2 tracking-tight">Check Your Inbox</h3>
+                <p class="text-[12px] text-textMuted dark:text-slate-400 mb-6 leading-relaxed">
+                    Account created successfully! We've sent a verification link to your email address. Please verify your email before logging in.
+                </p>
+                <div class="flex w-full gap-3">
+                    <button onclick="closeVerificationModal()" class="flex-1 py-3.5 bg-primaryBrand hover:bg-primaryHover text-white font-black text-[11px] uppercase tracking-widest rounded-xl transition-colors shadow-soft">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div id="forgotPasswordModal" class="modal-overlay fixed inset-0 z-[120] bg-darkPurple/60 dark:bg-black/80 backdrop-blur-sm flex justify-center items-center">
+        <div class="modal-content w-[90%] max-w-sm bg-cardWhite dark:bg-slate-800 rounded-[24px] p-6 border border-borderLight dark:border-slate-700 shadow-2xl transition-colors">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-black text-darkPurple dark:text-white tracking-tight">Reset Password</h3>
+                <button onclick="closeForgotPasswordModal()" class="text-textMuted hover:text-indRed w-6 h-6 flex items-center justify-center rounded-full bg-bgLight dark:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-xmark text-[11px]"></i>
+                </button>
+            </div>
+            <p class="text-[11px] text-textMuted dark:text-slate-400 mb-6">Enter your email address and we'll send you a link to reset your password.</p>
+            <form onsubmit="handleResetPassword(event)" class="space-y-4">
+                <div>
+                    <input type="email" id="reset-email" required class="w-full bg-bgLight dark:bg-slate-900 border border-borderLight dark:border-slate-700 rounded-xl p-3.5 text-[13px] font-medium text-darkPurple dark:text-white focus:ring-2 focus:ring-primaryBrand outline-none transition-all placeholder:text-slate-400" placeholder="Your email address">
+                </div>
+                <button type="submit" id="btn-reset-submit" class="w-full py-4 bg-primaryBrand hover:bg-primaryHover text-white font-black text-[11px] uppercase tracking-widest rounded-xl transition-colors shadow-soft flex justify-center items-center gap-2">
+                    Send Reset Link
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script type="module" src="firebase-config.js"></script>
+</body>
+</html>
